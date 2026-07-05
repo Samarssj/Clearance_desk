@@ -1,4 +1,4 @@
-# Resume-JD Matcher (Hybrid ATS Scorer)
+# Clearance Desk (Hybrid ATS Scorer)
 
 A hybrid resume parser and ATS-style scoring tool that compares a candidate's
 resume against a job description and returns a fit score with a breakdown.
@@ -65,3 +65,6 @@ resume-jd-matcher/
 Tested for deployment on **Streamlit Community Cloud** or **Render** (same
 pattern as other projects in this portfolio). Remember to set `GEMINI_API_KEY`
 as a secret/environment variable on the platform rather than committing `.env`.
+
+<img width="1440" height="900" alt="Screenshot 2026-07-05 at 20 12 38" src="https://github.com/user-attachments/assets/4f8be5a4-01e6-4d71-9706-dbb518e81d2c" />
+
