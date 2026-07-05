@@ -10,25 +10,9 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
-import spacy
-import en_core_web_sm
 import pdfplumber
 from docx import Document
 import google.generativeai as genai
-
-# ---------------------------------------------------------------------------
-# Setup
-# ---------------------------------------------------------------------------
-
-_nlp = None
-
-
-def get_nlp():
-    """Lazy-load spaCy model (avoids slow import on every Streamlit rerun)."""
-    global _nlp
-    if _nlp is None:
-        _nlp = en_core_web_sm.load()
-    return _nlp
 
 
 def configure_gemini(api_key: Optional[str] = None):
