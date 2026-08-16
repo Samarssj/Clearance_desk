@@ -19,6 +19,32 @@ A polished, explainable ATS-style workspace that parses a candidate resume, comp
 
 </div>
 
+## Tech stack
+
+<div align="center">
+
+<a href="https://www.python.org/"><img src="https://cdn.simpleicons.org/python/3776AB" alt="Python" width="58" height="58" /></a>&nbsp;&nbsp;
+<a href="https://streamlit.io/"><img src="https://cdn.simpleicons.org/streamlit/FF4B4B" alt="Streamlit" width="58" height="58" /></a>&nbsp;&nbsp;
+<a href="https://ai.google.dev/gemini-api/docs"><img src="https://cdn.simpleicons.org/google/4285F4" alt="Google Gemini" width="58" height="58" /></a>&nbsp;&nbsp;
+<a href="https://numpy.org/"><img src="https://cdn.simpleicons.org/numpy/013243" alt="NumPy" width="58" height="58" /></a>&nbsp;&nbsp;
+<a href="https://pandas.pydata.org/"><img src="https://cdn.simpleicons.org/pandas/150458" alt="Pandas" width="58" height="58" /></a>&nbsp;&nbsp;
+<a href="https://github.com/"><img src="https://cdn.simpleicons.org/github/F4F7FB" alt="GitHub" width="58" height="58" /></a>
+
+<br />
+
+<strong>Python · Streamlit · Gemini · NumPy · Pandas · GitHub</strong>
+
+</div>
+
+| Layer | Technologies |
+| --- | --- |
+| **Application** | Streamlit, custom HTML/SVG components, responsive CSS |
+| **Document ingestion** | `pdfplumber`, `pypdf`, `python-docx` |
+| **Extraction** | Regex rules, live PDF URI annotations, deterministic skill taxonomy |
+| **Scoring** | RapidFuzz, NumPy, cosine similarity, Jaccard fallback |
+| **AI fallback** | Google Gemini API via `google-generativeai` |
+| **Configuration** | `python-dotenv`, environment-based secrets |
+
 > **Clearance Desk** is designed as a fast first-pass review surface: structured enough to explain why a score moved, lightweight enough to run locally, and graceful enough to work without an AI key.
 
 ## Why this exists
