@@ -242,10 +242,10 @@ body, p, span, div, label, button, textarea { font-family: 'DM Sans', sans-serif
 [data-testid="stFileUploaderDropzone"] { border-style:dashed !important; min-height:180px; }
 [data-testid="stFileUploaderDropzone"]:hover { border-color:var(--mint) !important; background:rgba(101,229,186,.04) !important; }
 [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color:var(--paper-dim) !important; }
-.stButton { margin-top:1.25rem; }
-.stButton > button { background:linear-gradient(135deg, var(--mint), #8deecb) !important; color:var(--ink) !important; font:700 .78rem 'DM Mono', monospace !important; letter-spacing:.08em !important; text-transform:uppercase; border:0 !important; border-radius:12px !important; padding:.82rem 1.1rem !important; box-shadow:0 8px 22px rgba(101,229,186,.16); transition:transform .15s ease, box-shadow .15s ease; }
-.stButton > button:hover { transform:translateY(-2px); box-shadow:0 12px 28px rgba(101,229,186,.25); }
-.stButton > button:focus { box-shadow:0 0 0 2px var(--ink), 0 0 0 4px var(--mint) !important; }
+.stButton, .stFormSubmitButton { margin-top:1.25rem; }
+.stButton > button, .stFormSubmitButton > button, [data-testid="stFormSubmitButton"] > button { background:linear-gradient(135deg, var(--blue), #a995ff) !important; background-color:var(--blue) !important; color:#07111b !important; font:700 .78rem 'DM Mono', monospace !important; letter-spacing:.08em !important; text-transform:uppercase; border:0 !important; border-radius:12px !important; padding:.82rem 1.1rem !important; min-height:3rem !important; opacity:1 !important; box-shadow:0 8px 24px rgba(126,184,255,.25), inset 0 1px 0 rgba(255,255,255,.28); transition:transform .15s ease, box-shadow .15s ease; }
+.stButton > button:hover, .stFormSubmitButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover { transform:translateY(-2px); box-shadow:0 12px 30px rgba(126,184,255,.36), inset 0 1px 0 rgba(255,255,255,.32); }
+.stButton > button:focus, .stFormSubmitButton > button:focus, [data-testid="stFormSubmitButton"] > button:focus { box-shadow:0 0 0 2px var(--ink), 0 0 0 4px var(--blue) !important; }
 .stAlert { border-radius:14px !important; background:rgba(242,183,102,.08) !important; border:1px solid rgba(242,183,102,.3) !important; }
 
 .divider { height:1px; border:0; background:linear-gradient(90deg, var(--track), transparent); margin:3.6rem 0 2.2rem; }
