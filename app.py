@@ -29,6 +29,16 @@ st.set_page_config(
 )
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+# Keep the submitted bytes and parsed result stable across Streamlit reruns.
+# This prevents a widget refresh or source-file update from invalidating the
+# first scan after the user has already selected a resume.
+if "scan_request" not in st.session_state:
+    st.session_state.scan_request = None
+if "scan_output" not in st.session_state:
+    st.session_state.scan_output = None
+if "scan_error" not in st.session_state:
+    st.session_state.scan_error = None
+
 # ---------------------------------------------------------------------------
 # Sidebar: quiet product context instead of a generic control rail
 # ---------------------------------------------------------------------------
@@ -117,35 +127,36 @@ st.markdown(
 )
 
 intake_left, intake_right = st.columns([0.95, 1.25], gap="large")
-with intake_left:
-    st.markdown(
-        '<div class="intake-card"><div class="input-label">Candidate file</div>'
-        '<div class="input-help">Upload the resume you want to review.</div>',
-        unsafe_allow_html=True,
-    )
-    uploaded_file = st.file_uploader(
-        "Candidate resume",
-        type=["pdf", "docx", "txt"],
-        label_visibility="collapsed",
-        help="Supported formats: PDF, DOCX, TXT",
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
+with st.form("clearance_scan_form", clear_on_submit=False):
+    with intake_left:
+        st.markdown(
+            '<div class="intake-card"><div class="input-label">Candidate file</div>'
+            '<div class="input-help">Upload the resume you want to review.</div>',
+            unsafe_allow_html=True,
+        )
+        uploaded_file = st.file_uploader(
+            "Candidate resume",
+            type=["pdf", "docx", "txt"],
+            label_visibility="collapsed",
+            help="Supported formats: PDF, DOCX, TXT",
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 
-with intake_right:
-    st.markdown(
-        '<div class="intake-card"><div class="input-label">Target role brief</div>'
-        '<div class="input-help">Paste the job description or the requirements that matter most.</div>',
-        unsafe_allow_html=True,
-    )
-    jd_text = st.text_area(
-        "Job description",
-        height=220,
-        label_visibility="collapsed",
-        placeholder="Paste the role's mission, required skills, experience level, and qualifications here…",
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
+    with intake_right:
+        st.markdown(
+            '<div class="intake-card"><div class="input-label">Target role brief</div>'
+            '<div class="input-help">Paste the job description or the requirements that matter most.</div>',
+            unsafe_allow_html=True,
+        )
+        jd_text = st.text_area(
+            "Job description",
+            height=220,
+            label_visibility="collapsed",
+            placeholder="Paste the role's mission, required skills, experience level, and qualifications here…",
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 
-run = st.button("Run clearance scan  →", use_container_width=True)
+    run = st.form_submit_button("Run clearance scan  →", use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # Scan + results
@@ -153,14 +164,30 @@ run = st.button("Run clearance scan  →", use_container_width=True)
 
 if run:
     if not uploaded_file:
-        st.warning("Add a candidate file to the intake tray before running the scan.")
+        st.session_state.scan_error = "Add a candidate file to the intake tray before running the scan."
+        st.session_state.scan_output = None
     elif not jd_text.strip():
-        st.warning("Paste a target role brief so the candidate can be scored against something concrete.")
+        st.session_state.scan_error = "Paste a target role brief so the candidate can be scored against something concrete."
+        st.session_state.scan_output = None
     else:
-        with st.spinner("Reading the candidate file…"):
-            suffix = "." + uploaded_file.name.split(".")[-1]
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(uploaded_file.getvalue())
+        st.session_state.scan_error = None
+        st.session_state.scan_request = {
+            "name": uploaded_file.name,
+            "suffix": "." + uploaded_file.name.rsplit(".", 1)[-1].lower(),
+            "bytes": uploaded_file.getvalue(),
+            "jd_text": jd_text.strip(),
+        }
+        st.session_state.scan_output = None
+
+if st.session_state.scan_error:
+    st.warning(st.session_state.scan_error)
+
+if st.session_state.scan_request and st.session_state.scan_output is None and not st.session_state.scan_error:
+    request = st.session_state.scan_request
+    try:
+        with st.spinner("Reading the candidate file and capturing live links…"):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=request["suffix"]) as tmp:
+                tmp.write(request["bytes"])
                 tmp_path = tmp.name
             try:
                 resume = parse_resume(tmp_path, gemini_model=gemini_model)
@@ -168,104 +195,121 @@ if run:
                 os.unlink(tmp_path)
 
         with st.spinner("Comparing the profile with the role brief…"):
-            result = score_resume(resume, jd_text, gemini_model=gemini_model)
+            result = score_resume(resume, request["jd_text"], gemini_model=gemini_model)
+    except Exception as exc:
+        st.session_state.scan_error = (
+            "This file could not be parsed on the first pass. "
+            f"Try another PDF export or DOCX file. ({type(exc).__name__})"
+        )
+        st.session_state.scan_request = None
+    else:
+        st.session_state.scan_output = {
+            "resume": resume,
+            "result": result,
+            "filename": request["name"],
+        }
 
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+if st.session_state.scan_output:
+    resume = st.session_state.scan_output["resume"]
+    result = st.session_state.scan_output["result"]
+    result_filename = st.session_state.scan_output["filename"]
+
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="result-header"><div><div class="section-kicker">02 / Clearance readout</div>'
+        '<div class="section-title">The signal is in</div></div>'
+        '<div class="processing-note">PROFILE × ROLE BRIEF · COMPLETE</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    matched_count = len(result.matched_skills)
+    missing_count = len(result.missing_skills)
+    experience_text = f"{resume.years_experience:g} yrs" if resume.years_experience is not None else "Not detected"
+    st.markdown(
+        '<div class="metric-grid">'
+        + render_metric_card("Overall fit", f"{result.overall_score:.1f}", "weighted signal", "mint")
+        + render_metric_card("Matched skills", str(matched_count), "from the role brief", "blue")
+        + render_metric_card("Flagged gaps", str(missing_count), "to investigate", "rose")
+        + render_metric_card("Experience", experience_text, "detected in resume", "amber")
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+
+    verdict_col, gauge_col, candidate_col = st.columns([0.95, 1.15, 1.05], gap="medium")
+    with verdict_col:
+        label = "Ready for shortlist" if result.overall_score >= 75 else "Needs human review"
         st.markdown(
-            '<div class="result-header"><div><div class="section-kicker">02 / Clearance readout</div>'
-            '<div class="section-title">The signal is in</div></div>'
-            '<div class="processing-note">PROFILE × ROLE BRIEF · COMPLETE</div></div>',
+            '<div class="verdict-panel"><div class="verdict-panel-top">'
+            '<div><div class="panel-kicker">Decision layer</div>'
+            f'<div class="verdict-panel-title">{label}</div></div>'
+            '<div class="status-dot"></div></div>'
+            + render_stamp(result.overall_score)
+            + '<div class="verdict-foot">A weighted reading, not a final hiring decision. Use the evidence below to guide the next conversation.</div></div>',
             unsafe_allow_html=True,
         )
+        if resume.used_llm_fallback:
+            st.caption("Ambiguous layout detected; LLM fallback helped complete the extraction.")
 
-        matched_count = len(result.matched_skills)
-        missing_count = len(result.missing_skills)
-        experience_text = f"{resume.years_experience:g} yrs" if resume.years_experience is not None else "Not detected"
+    with gauge_col:
+        st.markdown(render_gauge(result.overall_score), unsafe_allow_html=True)
+
+    with candidate_col:
+        st.markdown(render_candidate_card(resume, result_filename), unsafe_allow_html=True)
+
+    st.markdown('<div class="detail-grid">', unsafe_allow_html=True)
+    breakdown_col, evidence_col = st.columns([1.05, 0.95], gap="medium")
+    with breakdown_col:
         st.markdown(
-            '<div class="metric-grid">'
-            + render_metric_card("Overall fit", f"{result.overall_score:.1f}", "weighted signal", "mint")
-            + render_metric_card("Matched skills", str(matched_count), "from the role brief", "blue")
-            + render_metric_card("Flagged gaps", str(missing_count), "to investigate", "rose")
-            + render_metric_card("Experience", experience_text, "detected in resume", "amber")
+            '<div class="detail-card"><div class="detail-card-header">'
+            '<div><div class="panel-kicker">Signal composition</div><div class="detail-card-title">What shaped the score</div></div>'
+            '<div class="detail-card-note">WEIGHTED</div></div>'
+            + render_bars([
+                ("Skill overlap", result.keyword_score, "var(--blue)", "45% weight"),
+                ("Semantic similarity", result.semantic_score, "var(--mint)", "35% weight"),
+                ("Experience match", result.experience_score, "var(--amber)", "20% weight"),
+            ])
             + '</div>',
             unsafe_allow_html=True,
         )
+    with evidence_col:
+        gap_copy = result.gap_summary or "No AI field note was generated in this session. Use the matched and missing skill evidence as the review starting point."
+        st.markdown(render_signal_panel("Field note", "Recruiter lens", gap_copy, "amber"), unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        verdict_col, gauge_col, candidate_col = st.columns([0.95, 1.15, 1.05], gap="medium")
-        with verdict_col:
-            label = "Ready for shortlist" if result.overall_score >= 75 else "Needs human review"
-            st.markdown(
-                '<div class="verdict-panel"><div class="verdict-panel-top">'
-                '<div><div class="panel-kicker">Decision layer</div>'
-                f'<div class="verdict-panel-title">{label}</div></div>'
-                '<div class="status-dot"></div></div>'
-                + render_stamp(result.overall_score)
-                + '<div class="verdict-foot">A weighted reading, not a final hiring decision. Use the evidence below to guide the next conversation.</div></div>',
-                unsafe_allow_html=True,
-            )
-            if resume.used_llm_fallback:
-                st.caption("Ambiguous layout detected; LLM fallback helped complete the extraction.")
+    st.markdown('<div class="detail-grid">', unsafe_allow_html=True)
+    matched_col, missing_col = st.columns(2, gap="medium")
+    with matched_col:
+        st.markdown(
+            '<div class="detail-card"><div class="detail-card-header">'
+            '<div><div class="panel-kicker">Evidence / aligned</div><div class="detail-card-title">Matched skills</div></div>'
+            f'<div class="detail-card-note">{matched_count} SIGNALS</div></div>'
+            + render_chips(result.matched_skills, "matched")
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+    with missing_col:
+        st.markdown(
+            '<div class="detail-card"><div class="detail-card-header">'
+            '<div><div class="panel-kicker">Evidence / investigate</div><div class="detail-card-title">Flagged gaps</div></div>'
+            f'<div class="detail-card-note">{missing_count} SIGNALS</div></div>'
+            + render_chips(result.missing_skills, "missing")
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        with gauge_col:
-            st.markdown(render_gauge(result.overall_score), unsafe_allow_html=True)
-
-        with candidate_col:
-            st.markdown(render_candidate_card(resume, uploaded_file.name), unsafe_allow_html=True)
-
-        st.markdown('<div class="detail-grid">', unsafe_allow_html=True)
-        breakdown_col, evidence_col = st.columns([1.05, 0.95], gap="medium")
-        with breakdown_col:
-            st.markdown(
-                '<div class="detail-card"><div class="detail-card-header">'
-                '<div><div class="panel-kicker">Signal composition</div><div class="detail-card-title">What shaped the score</div></div>'
-                '<div class="detail-card-note">WEIGHTED</div></div>'
-                + render_bars([
-                    ("Skill overlap", result.keyword_score, "var(--blue)", "45% weight"),
-                    ("Semantic similarity", result.semantic_score, "var(--mint)", "35% weight"),
-                    ("Experience match", result.experience_score, "var(--amber)", "20% weight"),
-                ])
-                + '</div>',
-                unsafe_allow_html=True,
-            )
-        with evidence_col:
-            gap_copy = result.gap_summary or "No AI field note was generated in this session. Use the matched and missing skill evidence as the review starting point."
-            st.markdown(render_signal_panel("Field note", "Recruiter lens", gap_copy, "amber"), unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="detail-grid">', unsafe_allow_html=True)
-        matched_col, missing_col = st.columns(2, gap="medium")
-        with matched_col:
-            st.markdown(
-                '<div class="detail-card"><div class="detail-card-header">'
-                '<div><div class="panel-kicker">Evidence / aligned</div><div class="detail-card-title">Matched skills</div></div>'
-                f'<div class="detail-card-note">{matched_count} SIGNALS</div></div>'
-                + render_chips(result.matched_skills, "matched")
-                + '</div>',
-                unsafe_allow_html=True,
-            )
-        with missing_col:
-            st.markdown(
-                '<div class="detail-card"><div class="detail-card-header">'
-                '<div><div class="panel-kicker">Evidence / investigate</div><div class="detail-card-title">Flagged gaps</div></div>'
-                f'<div class="detail-card-note">{missing_count} SIGNALS</div></div>'
-                + render_chips(result.missing_skills, "missing")
-                + '</div>',
-                unsafe_allow_html=True,
-            )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        st.markdown('<div class="section-kicker">03 / Source record</div>', unsafe_allow_html=True)
-        st.markdown('<div class="section-title" style="margin:.4rem 0 1rem;">Extracted candidate data</div>', unsafe_allow_html=True)
-        with st.expander("Open the raw extraction record"):
-            st.json({
-                "name": resume.name,
-                "email": resume.email,
-                "phone": resume.phone,
-                "linkedin": resume.linkedin,
-                "github": resume.github,
-                "skills": resume.skills,
-                "education": resume.education,
-                "experience": resume.experience,
-                "years_experience": resume.years_experience,
-            })
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-kicker">03 / Source record</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title" style="margin:.4rem 0 1rem;">Extracted candidate data</div>', unsafe_allow_html=True)
+    with st.expander("Open the raw extraction record"):
+        st.json({
+            "name": resume.name,
+            "email": resume.email,
+            "phone": resume.phone,
+            "linkedin": resume.linkedin,
+            "github": resume.github,
+            "skills": resume.skills,
+            "education": resume.education,
+            "experience": resume.experience,
+            "years_experience": resume.years_experience,
+        })

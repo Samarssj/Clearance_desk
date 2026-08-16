@@ -13,6 +13,7 @@ from typing import Optional
 import pdfplumber
 from docx import Document
 import google.generativeai as genai
+from pypdf import PdfReader
 
 
 def configure_gemini(api_key: Optional[str] = None):
@@ -73,6 +74,26 @@ def _pdf_uri_values(page) -> list:
     return values
 
 
+def _pypdf_uri_values(file_path: str) -> list:
+    """Read URI actions directly from low-level PDF annotation objects."""
+    values = []
+    try:
+        reader = PdfReader(file_path)
+        for page in reader.pages:
+            annotations = page.get("/Annots") or []
+            for annotation in annotations:
+                obj = annotation.get_object() if hasattr(annotation, "get_object") else annotation
+                action = obj.get("/A") if hasattr(obj, "get") else None
+                uri = action.get("/URI") if action and hasattr(action, "get") else None
+                if uri:
+                    values.append(str(uri))
+    except Exception:
+        # Annotation support is supplementary; text parsing must still work
+        # for malformed or unusual PDFs.
+        return []
+    return values
+
+
 def load_text(file_path: str) -> str:
     if file_path.lower().endswith(".pdf"):
         text = []
@@ -80,7 +101,8 @@ def load_text(file_path: str) -> str:
             for page in pdf.pages:
                 text.append(page.extract_text() or "")
                 text.extend(_pdf_uri_values(page))
-        return "\n".join(text)
+        text.extend(_pypdf_uri_values(file_path))
+        return "\n".join(str(value) for value in text if value)
     elif file_path.lower().endswith(".docx"):
         doc = Document(file_path)
         return "\n".join(p.text for p in doc.paragraphs)
