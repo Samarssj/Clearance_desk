@@ -15,8 +15,6 @@ A polished, explainable ATS-style workspace that parses a candidate resume, comp
 
 <br />
 
-<img src="https://github.com/user-attachments/assets/4f8be5a4-01e6-4d71-9706-dbb518e81d2c" alt="Clearance Desk resume fit review dashboard" width="92%" />
-
 </div>
 
 ## Tech stack
