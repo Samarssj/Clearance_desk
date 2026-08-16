@@ -46,12 +46,40 @@ class ParsedResume:
 # File loading
 # ---------------------------------------------------------------------------
 
+def _pdf_uri_values(page) -> list:
+    """Collect URI actions from pdfplumber hyperlink and annotation objects.
+
+    A PDF can show only display text such as ``LinkedIn`` while storing the
+    actual destination in a link annotation. The visible text extractor does
+    not include that destination, so the annotation URI is added to the text
+    stream before rule-based parsing.
+    """
+    values = []
+    for link in getattr(page, "hyperlinks", None) or []:
+        if isinstance(link, dict):
+            uri = link.get("uri") or link.get("URI")
+            if uri:
+                values.append(uri)
+
+    for annot in getattr(page, "annots", None) or []:
+        if not isinstance(annot, dict):
+            continue
+        uri = annot.get("uri") or annot.get("URI")
+        action = annot.get("A") or annot.get("a")
+        if not uri and isinstance(action, dict):
+            uri = action.get("URI") or action.get("uri")
+        if uri:
+            values.append(uri)
+    return values
+
+
 def load_text(file_path: str) -> str:
     if file_path.lower().endswith(".pdf"):
         text = []
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
                 text.append(page.extract_text() or "")
+                text.extend(_pdf_uri_values(page))
         return "\n".join(text)
     elif file_path.lower().endswith(".docx"):
         doc = Document(file_path)
@@ -67,8 +95,22 @@ def load_text(file_path: str) -> str:
 
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 PHONE_RE = re.compile(r"(\+?\d{1,3}[-.\s]?)?\(?\d{3,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}")
-LINKEDIN_RE = re.compile(r"(https?://)?(www\.)?linkedin\.com/in/[A-Za-z0-9\-_/]+")
-GITHUB_RE = re.compile(r"(https?://)?(www\.)?github\.com/[A-Za-z0-9\-_/]+")
+LINKEDIN_RE = re.compile(
+    r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9._~%:/?#\[\]@!$&'()*+,;=-]+",
+    flags=re.IGNORECASE,
+)
+GITHUB_RE = re.compile(
+    r"(?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9._~%:/?#\[\]@!$&'()*+,;=-]+",
+    flags=re.IGNORECASE,
+)
+
+
+def normalize_profile_url(value: str) -> str:
+    """Return a clean absolute profile URL suitable for a browser href."""
+    value = value.strip().rstrip(".,;:)]}")
+    if not value.lower().startswith(("http://", "https://")):
+        value = "https://" + value
+    return value
 
 SECTION_HEADERS = ["experience", "work experience", "education", "skills",
                    "projects", "certifications", "summary", "objective"]
@@ -95,10 +137,10 @@ def rule_based_extract(text: str) -> ParsedResume:
     resume.phone = phone_match.group(0).strip() if phone_match else None
 
     li_match = LINKEDIN_RE.search(text)
-    resume.linkedin = li_match.group(0) if li_match else None
+    resume.linkedin = normalize_profile_url(li_match.group(0)) if li_match else None
 
     gh_match = GITHUB_RE.search(text)
-    resume.github = gh_match.group(0) if gh_match else None
+    resume.github = normalize_profile_url(gh_match.group(0)) if gh_match else None
 
     # Name: heuristic - first non-empty line that isn't an email/phone/header
     for line in text.strip().split("\n")[:5]:
